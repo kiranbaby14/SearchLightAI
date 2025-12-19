@@ -1,0 +1,24 @@
+{
+	"name": "searchlightai",
+	"version": "1.0.0",
+	"description": "Illuminating moments in video",
+	"scripts": {
+		"monorepo-setup": "pnpm install && pnpm --filter @searchlightai/server exec uv sync",
+		"dev": "concurrently \"pnpm run dev:client\" \"pnpm run dev:server\"",
+		"dev:client": "pnpm --filter @searchlightai/client dev",
+		"dev:server": "pnpm --filter @searchlightai/server dev",
+		"build": "pnpm -r build",
+		"prepare": "husky",
+		"format": "pnpm run format:client && pnpm run format:server",
+		"format:client": "pnpm --filter @searchlightai/client format",
+		"format:server": "pnpm --filter @searchlightai/server format",
+		"format:check": "pnpm run format:check:client && pnpm run format:check:server",
+		"format:check:client": "pnpm --filter @searchlightai/client format:check",
+		"format:check:server": "pnpm --filter @searchlightai/server format:check"
+	},
+	"author": "kiranbaby14",
+	"devDependencies": {
+		"concurrently": "^9.2.0",
+		"husky": "^9.1.7"
+	}
+}
