@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api import api_router
 from app.core.config import get_settings
@@ -55,6 +56,18 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(api_router, prefix="/api")
+
+# Mount static file directories for serving videos and frames
+# Create directories if they don't exist
+settings.upload_dir.mkdir(parents=True, exist_ok=True)
+settings.frames_dir.mkdir(parents=True, exist_ok=True)
+settings.audio_dir.mkdir(parents=True, exist_ok=True)
+
+# Serve uploaded videos
+app.mount("/uploads", StaticFiles(directory=str(settings.upload_dir)), name="uploads")
+
+# Serve extracted frames
+app.mount("/frames", StaticFiles(directory=str(settings.frames_dir)), name="frames")
 
 
 @app.get("/health")

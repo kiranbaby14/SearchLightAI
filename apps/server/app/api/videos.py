@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File
-from sqlmodel import select
+from sqlmodel import select, delete
 
 from app.api.dependencies import (
     SessionDep,
@@ -21,9 +21,9 @@ from app.services import (
     EmbeddingService,
     VectorStoreService,
 )
-from app.core.database import async_session_factory
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.core.database import async_session_factory
 from app.models import Video, VideoStatus, Transcript
 from app.schemas import VideoCreate, VideoRead, VideoListResponse, VideoUploadResponse
 
@@ -218,8 +218,8 @@ async def delete_video(
     # Delete embeddings from vector store
     vector_store.delete_video_embeddings(video_id)
 
-    # Delete transcripts
-    await session.execute(select(Transcript).where(Transcript.video_id == video_id))
+    # Delete transcripts first (use delete, not select!)
+    await session.execute(delete(Transcript).where(Transcript.video_id == video_id))
 
     # Delete video record
     await session.delete(video)

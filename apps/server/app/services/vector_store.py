@@ -1,6 +1,6 @@
 """Vector store service using Qdrant."""
 
-from uuid import UUID
+from uuid import UUID, uuid5, NAMESPACE_DNS
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
@@ -15,6 +15,13 @@ settings = get_settings()
 # Collection names
 VISUAL_COLLECTION = "visual_embeddings"
 SPEECH_COLLECTION = "speech_embeddings"
+
+
+def generate_point_id(video_id: UUID, index: int, prefix: str = "") -> str:
+    """Generate a deterministic UUID for a point based on video_id and index."""
+    # Create a deterministic UUID using uuid5
+    name = f"{video_id}_{prefix}_{index}"
+    return str(uuid5(NAMESPACE_DNS, name))
 
 
 class VectorStoreService:
@@ -90,7 +97,8 @@ class VectorStoreService:
 
         points = []
         for i, (keyframe, embedding) in enumerate(zip(keyframes, embeddings)):
-            point_id = f"{video_id}_{i}"
+            # Generate a valid UUID for the point
+            point_id = generate_point_id(video_id, i, "visual")
             points.append(
                 models.PointStruct(
                     id=point_id,
@@ -131,7 +139,8 @@ class VectorStoreService:
 
         points = []
         for i, (segment, embedding) in enumerate(zip(segments, embeddings)):
-            point_id = f"{video_id}_speech_{i}"
+            # Generate a valid UUID for the point
+            point_id = generate_point_id(video_id, i, "speech")
             points.append(
                 models.PointStruct(
                     id=point_id,
@@ -159,9 +168,9 @@ class VectorStoreService:
         score_threshold: float = 0.5,
     ) -> list[dict]:
         """Search for visually similar frames."""
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=VISUAL_COLLECTION,
-            query_vector=query_embedding,
+            query=query_embedding,
             limit=limit,
             score_threshold=score_threshold,
         )
@@ -174,7 +183,7 @@ class VectorStoreService:
                 "score": r.score,
                 "type": "visual",
             }
-            for r in results
+            for r in results.points
         ]
 
     def search_speech(
@@ -184,9 +193,9 @@ class VectorStoreService:
         score_threshold: float = 0.5,
     ) -> list[dict]:
         """Search for semantically similar speech segments."""
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=SPEECH_COLLECTION,
-            query_vector=query_embedding,
+            query=query_embedding,
             limit=limit,
             score_threshold=score_threshold,
         )
@@ -200,7 +209,7 @@ class VectorStoreService:
                 "score": r.score,
                 "type": "speech",
             }
-            for r in results
+            for r in results.points
         ]
 
     def delete_video_embeddings(self, video_id: UUID) -> None:
