@@ -25,7 +25,7 @@ export default function SearchPage() {
           query,
           search_type: searchType,
           limit: 20,
-          threshold: 0.3
+          threshold: 0.01
         });
         setResults(response.results);
         setHasSearched(true);
