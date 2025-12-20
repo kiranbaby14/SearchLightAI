@@ -1,0 +1,11 @@
+{
+    "name": "@searchlightai/server",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+      "dev": "uv run uvicorn main:app --reload",
+      "start": "uv run uvicorn main:app",
+      "format": "uv run ruff format .",
+      "format:check": "uv run ruff format --check ."
+    }
+  }
