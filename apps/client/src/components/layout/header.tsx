@@ -25,7 +25,7 @@ export function Header() {
               <Video className="text-primary-foreground h-5 w-5" />
             </div>
             <span className="text-lg font-semibold tracking-tight">
-              VideoSearch
+              SearchLightAI
             </span>
           </Link>
 

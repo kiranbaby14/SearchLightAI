@@ -24,6 +24,10 @@ import {
 import { getVideo, getVideoTranscript } from '@/lib/api';
 import type { Video, TranscriptSegment } from '@/types';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Remove /api suffix for static files
+const STATIC_BASE = API_BASE.replace('/api', '');
+
 export default function VideoDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -82,6 +86,10 @@ export default function VideoDetailPage() {
 
   const isReady = video.status === 'completed';
 
+  // Build video URL from the original_path
+  // original_path is like "uploads/run_it_up.mp4" or "uploads\run_it_up.mp4"
+  const videoUrl = `${STATIC_BASE}/${video.original_path.replace(/\\/g, '/')}`;
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Back Button */}
@@ -98,10 +106,7 @@ export default function VideoDetailPage() {
         <div className="lg:col-span-2">
           {/* Video Player */}
           {isReady ? (
-            <VideoPlayer
-              src={`http://localhost:8000/videos/${video.original_path}`}
-              initialTime={startTime}
-            />
+            <VideoPlayer src={videoUrl} initialTime={startTime} />
           ) : (
             <div className="bg-muted flex aspect-video items-center justify-center rounded-xl">
               <div className="text-center">

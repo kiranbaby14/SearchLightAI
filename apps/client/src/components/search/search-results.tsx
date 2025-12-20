@@ -5,6 +5,9 @@ import { Play, Clock, AudioLines, Eye, FileVideo } from 'lucide-react';
 import { cn, formatTimestamp } from '@/lib/utils';
 import type { SearchResult } from '@/types';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const STATIC_BASE = API_BASE.replace('/api', '');
+
 interface SearchResultsProps {
   results: SearchResult[];
   query: string;
@@ -53,16 +56,21 @@ export function SearchResults({ results, query }: SearchResultsProps) {
 function SearchResultCard({ result }: { result: SearchResult }) {
   const isVisual = result.result_type === 'visual';
 
+  // Build frame URL - frame_path is like "frames/video-id/frame_0000_0.00.jpg"
+  const frameUrl = result.frame_path
+    ? `${STATIC_BASE}/${result.frame_path.replace(/\\/g, '/')}`
+    : null;
+
   return (
     <Link
       href={`/videos/${result.video_id}?t=${result.timestamp}`}
       className="group border-border/50 bg-card/50 hover:border-border hover:bg-card flex gap-4 rounded-xl border p-4 transition-all hover:shadow-lg"
     >
       <div className="bg-muted relative flex h-24 w-40 shrink-0 items-center justify-center overflow-hidden rounded-lg">
-        {result.frame_path ? (
+        {frameUrl ? (
           <>
             <img
-              src={`http://localhost:8000/frames/${result.frame_path}`}
+              src={frameUrl}
               alt="Frame preview"
               className="h-full w-full object-cover"
             />
