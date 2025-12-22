@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { VideoGrid } from '@/components/videos/video-grid';
 import { UploadDialog } from '@/components/videos/upload-dialog';
 import { getVideos, deleteVideo } from '@/lib/api';
-import type { Video as VideoType } from '@/types';
+import type { Video as VideoType, VideoUploadResponse } from '@/types';
+import { toast } from 'sonner';
 
 export default function VideosPage() {
   const [videos, setVideos] = useState<VideoType[]>([]);
@@ -23,6 +24,7 @@ export default function VideosPage() {
       setVideos(response.videos);
     } catch (error) {
       console.error('Failed to load videos:', error);
+      toast.error('Failed to load videos');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -41,16 +43,65 @@ export default function VideosPage() {
 
     if (!hasProcessing) return;
 
-    const interval = setInterval(() => loadVideos(), 5000);
+    const interval = setInterval(() => loadVideos(), 3000); // Faster polling
     return () => clearInterval(interval);
   }, [videos, loadVideos]);
 
+  // Handle newly uploaded video - add it optimistically
+  const handleVideoUploaded = useCallback(
+    (uploadResponse: VideoUploadResponse) => {
+      // Create an optimistic video entry from the upload response
+      const optimisticVideo: VideoType = {
+        id: uploadResponse.id,
+        filename: uploadResponse.filename,
+        original_path: '',
+        file_size: null,
+        duration: null,
+        width: null,
+        height: null,
+        status: uploadResponse.status,
+        error_message: null,
+        frame_count: 0,
+        keyframe_count: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        processed_at: null
+      };
+
+      // Add to the beginning of the list if not already there
+      setVideos((prev) => {
+        const exists = prev.some((v) => v.id === uploadResponse.id);
+        if (exists) return prev;
+        return [optimisticVideo, ...prev];
+      });
+
+      toast.success(`"${uploadResponse.filename}" uploaded`, {
+        description: 'Processing will begin shortly...'
+      });
+    },
+    []
+  );
+
+  // Handle upload complete (all files done)
+  const handleUploadComplete = useCallback(() => {
+    // Refresh to get accurate data from server
+    loadVideos();
+  }, [loadVideos]);
+
   const handleDelete = async (id: string) => {
+    const video = videos.find((v) => v.id === id);
+
+    // Optimistic delete
+    setVideos((prev) => prev.filter((v) => v.id !== id));
+
     try {
       await deleteVideo(id);
-      setVideos((prev) => prev.filter((v) => v.id !== id));
+      toast.success(`"${video?.filename}" deleted`);
     } catch (error) {
       console.error('Failed to delete video:', error);
+      toast.error('Failed to delete video');
+      // Revert on error
+      loadVideos();
     }
   };
 
@@ -77,7 +128,10 @@ export default function VideosPage() {
             />
           </Button>
 
-          <UploadDialog onSuccess={() => loadVideos()}>
+          <UploadDialog
+            onVideoUploaded={handleVideoUploaded}
+            onComplete={handleUploadComplete}
+          >
             <Button>
               <Plus className="mr-2 h-4 w-4" />
               Add Video
@@ -102,7 +156,10 @@ export default function VideosPage() {
             Add your first video to start searching. We&apos;ll automatically
             extract and index all the visual and audio content.
           </p>
-          <UploadDialog onSuccess={() => loadVideos()}>
+          <UploadDialog
+            onVideoUploaded={handleVideoUploaded}
+            onComplete={handleUploadComplete}
+          >
             <Button>
               <Plus className="mr-2 h-4 w-4" />
               Add Your First Video
@@ -114,6 +171,19 @@ export default function VideosPage() {
           <div className="mb-6">
             <p className="text-muted-foreground text-sm">
               {videos.length} video{videos.length !== 1 && 's'}
+              {videos.some(
+                (v) => !['completed', 'failed'].includes(v.status)
+              ) && (
+                <span className="text-primary ml-2">
+                  ·{' '}
+                  {
+                    videos.filter(
+                      (v) => !['completed', 'failed'].includes(v.status)
+                    ).length
+                  }{' '}
+                  processing
+                </span>
+              )}
             </p>
           </div>
           <VideoGrid videos={videos} onDelete={handleDelete} />

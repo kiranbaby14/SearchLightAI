@@ -1,35 +1,73 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Upload, File, X, Loader2 } from 'lucide-react';
+import { useState, useCallback, useRef } from 'react';
+import {
+  Upload,
+  File,
+  X,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  XCircle
+} from 'lucide-react';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
+  DialogDescription
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn, formatFileSize } from '@/lib/utils';
-import { uploadVideo, addVideoByPath } from '@/lib/api';
+import { addVideoByPath } from '@/lib/api';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 interface UploadDialogProps {
-  onSuccess?: () => void;
+  /** Called immediately when each video upload completes with the server response */
+  onVideoUploaded?: (response: VideoUploadResponse) => void;
+  /** Called when all uploads are complete (modal closing) */
+  onComplete?: () => void;
   children: React.ReactNode;
 }
 
-export function UploadDialog({ onSuccess, children }: UploadDialogProps) {
+interface VideoUploadResponse {
+  id: string;
+  filename: string;
+  status: string;
+  message: string;
+}
+
+type FileStatus = 'pending' | 'uploading' | 'done' | 'error' | 'cancelled';
+
+interface FileUploadState {
+  file: File;
+  status: FileStatus;
+  progress: number;
+  error?: string;
+  abortController?: AbortController;
+}
+
+export function UploadDialog({
+  onVideoUploaded,
+  onComplete,
+  children
+}: UploadDialogProps) {
   const [open, setOpen] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
+  const [fileStates, setFileStates] = useState<Map<string, FileUploadState>>(
+    new Map()
+  );
   const [filePath, setFilePath] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<
-    Record<string, 'pending' | 'uploading' | 'done' | 'error'>
-  >({});
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const getFileKey = (file: File, index: number) =>
+    `${file.name}-${file.size}-${index}`;
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -45,61 +83,204 @@ export function UploadDialog({ onSuccess, children }: UploadDialogProps) {
       return;
     }
 
-    setFiles((prev) => [...prev, ...droppedFiles]);
+    setFileStates((prev) => {
+      const newMap = new Map(prev);
+      droppedFiles.forEach((file, i) => {
+        const key = getFileKey(file, prev.size + i);
+        if (!newMap.has(key)) {
+          newMap.set(key, { file, status: 'pending', progress: 0 });
+        }
+      });
+      return newMap;
+    });
   }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
     const selectedFiles = e.target.files ? Array.from(e.target.files) : [];
-    if (selectedFiles.length > 0) {
-      setFiles((prev) => [...prev, ...selectedFiles]);
-    }
-    // Reset input so same files can be selected again
+
+    setFileStates((prev) => {
+      const newMap = new Map(prev);
+      selectedFiles.forEach((file, i) => {
+        const key = getFileKey(file, prev.size + i);
+        if (!newMap.has(key)) {
+          newMap.set(key, { file, status: 'pending', progress: 0 });
+        }
+      });
+      return newMap;
+    });
+
     e.target.value = '';
   };
 
-  const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
+  const removeFile = (key: string) => {
+    setFileStates((prev) => {
+      const newMap = new Map(prev);
+      const state = newMap.get(key);
+      if (state?.abortController) {
+        state.abortController.abort();
+      }
+      newMap.delete(key);
+      return newMap;
+    });
+  };
+
+  const cancelUpload = (key: string) => {
+    setFileStates((prev) => {
+      const newMap = new Map(prev);
+      const state = newMap.get(key);
+      if (state?.abortController) {
+        state.abortController.abort();
+      }
+      if (state) {
+        newMap.set(key, { ...state, status: 'cancelled', progress: 0 });
+      }
+      return newMap;
+    });
+  };
+
+  const uploadSingleFile = async (
+    key: string,
+    fileState: FileUploadState
+  ): Promise<boolean> => {
+    const abortController = new AbortController();
+
+    setFileStates((prev) => {
+      const newMap = new Map(prev);
+      newMap.set(key, {
+        ...fileState,
+        status: 'uploading',
+        progress: 0,
+        abortController
+      });
+      return newMap;
+    });
+
+    try {
+      const formData = new FormData();
+      formData.append('file', fileState.file);
+
+      const xhr = new XMLHttpRequest();
+
+      const uploadPromise = new Promise<VideoUploadResponse>(
+        (resolve, reject) => {
+          xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable) {
+              const progress = Math.round((event.loaded / event.total) * 100);
+              setFileStates((prev) => {
+                const newMap = new Map(prev);
+                const current = newMap.get(key);
+                if (current && current.status === 'uploading') {
+                  newMap.set(key, { ...current, progress });
+                }
+                return newMap;
+              });
+            }
+          });
+
+          xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try {
+                const response = JSON.parse(
+                  xhr.responseText
+                ) as VideoUploadResponse;
+                resolve(response);
+              } catch {
+                reject(new Error('Invalid response from server'));
+              }
+            } else {
+              reject(new Error(`Upload failed: ${xhr.statusText}`));
+            }
+          });
+
+          xhr.addEventListener('error', () =>
+            reject(new Error('Network error'))
+          );
+          xhr.addEventListener('abort', () =>
+            reject(new Error('Upload cancelled'))
+          );
+
+          abortController.signal.addEventListener('abort', () => xhr.abort());
+
+          xhr.open('POST', `${API_BASE}/videos/upload`);
+          xhr.send(formData);
+        }
+      );
+
+      const response = await uploadPromise;
+
+      setFileStates((prev) => {
+        const newMap = new Map(prev);
+        const current = newMap.get(key);
+        if (current) {
+          newMap.set(key, { ...current, status: 'done', progress: 100 });
+        }
+        return newMap;
+      });
+
+      // Immediately notify parent with the upload response
+      // This allows the video to appear in the list right away
+      onVideoUploaded?.(response);
+      return true;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Upload failed';
+      const isCancelled = errorMessage === 'Upload cancelled';
+
+      setFileStates((prev) => {
+        const newMap = new Map(prev);
+        const current = newMap.get(key);
+        if (current) {
+          newMap.set(key, {
+            ...current,
+            status: isCancelled ? 'cancelled' : 'error',
+            progress: 0,
+            error: isCancelled ? undefined : errorMessage
+          });
+        }
+        return newMap;
+      });
+      return false;
+    }
   };
 
   const handleUpload = async () => {
-    if (files.length === 0) return;
+    const pendingFiles = Array.from(fileStates.entries()).filter(
+      ([_, state]) => state.status === 'pending' || state.status === 'cancelled'
+    );
+
+    if (pendingFiles.length === 0) return;
 
     setIsUploading(true);
     setError(null);
 
-    // Initialize progress
-    const initialProgress: Record<
-      string,
-      'pending' | 'uploading' | 'done' | 'error'
-    > = {};
-    files.forEach((f) => {
-      initialProgress[f.name] = 'pending';
-    });
-    setUploadProgress(initialProgress);
+    // Upload files sequentially (could be parallel if desired)
+    for (const [key, state] of pendingFiles) {
+      // Check if file was removed while waiting
+      const currentState = fileStates.get(key);
+      if (!currentState || currentState.status === 'cancelled') continue;
 
-    let hasError = false;
-
-    for (const file of files) {
-      setUploadProgress((prev) => ({ ...prev, [file.name]: 'uploading' }));
-
-      try {
-        await uploadVideo(file);
-        setUploadProgress((prev) => ({ ...prev, [file.name]: 'done' }));
-      } catch (err) {
-        setUploadProgress((prev) => ({ ...prev, [file.name]: 'error' }));
-        hasError = true;
-      }
+      await uploadSingleFile(key, state);
     }
 
-    if (!hasError) {
-      setOpen(false);
-      setFiles([]);
-      setUploadProgress({});
-      onSuccess?.();
-    } else {
-      setError('Some files failed to upload');
-      setIsUploading(false);
+    setIsUploading(false);
+
+    // Check if all files are done
+    const allDone = Array.from(fileStates.values()).every(
+      (s) => s.status === 'done' || s.status === 'cancelled'
+    );
+
+    if (
+      allDone &&
+      Array.from(fileStates.values()).some((s) => s.status === 'done')
+    ) {
+      // Notify parent that all uploads are complete
+      onComplete?.();
+
+      // Auto-close after a short delay if all successful
+      setTimeout(() => {
+        setOpen(false);
+        setFileStates(new Map());
+      }, 1000);
     }
   };
 
@@ -110,10 +291,11 @@ export function UploadDialog({ onSuccess, children }: UploadDialogProps) {
     setError(null);
 
     try {
-      await addVideoByPath(filePath.trim());
+      const response = await addVideoByPath(filePath.trim());
+      onVideoUploaded?.(response as unknown as VideoUploadResponse);
+      onComplete?.();
       setOpen(false);
       setFilePath('');
-      onSuccess?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add video');
     } finally {
@@ -121,148 +303,190 @@ export function UploadDialog({ onSuccess, children }: UploadDialogProps) {
     }
   };
 
-  const clearFiles = () => {
-    setFiles([]);
+  const clearAllFiles = () => {
+    // Cancel any in-progress uploads
+    fileStates.forEach((state) => {
+      if (state.abortController) {
+        state.abortController.abort();
+      }
+    });
+    setFileStates(new Map());
     setError(null);
-    setUploadProgress({});
   };
 
-  const totalSize = files.reduce((acc, f) => acc + f.size, 0);
+  const retryFile = (key: string) => {
+    setFileStates((prev) => {
+      const newMap = new Map(prev);
+      const state = newMap.get(key);
+      if (state) {
+        newMap.set(key, {
+          ...state,
+          status: 'pending',
+          progress: 0,
+          error: undefined
+        });
+      }
+      return newMap;
+    });
+  };
+
+  const fileEntries = Array.from(fileStates.entries());
+  const totalSize = fileEntries.reduce((acc, [_, s]) => acc + s.file.size, 0);
+  const completedCount = fileEntries.filter(
+    ([_, s]) => s.status === 'done'
+  ).length;
+  const errorCount = fileEntries.filter(
+    ([_, s]) => s.status === 'error'
+  ).length;
+  const pendingCount = fileEntries.filter(
+    ([_, s]) => s.status === 'pending' || s.status === 'cancelled'
+  ).length;
+  const uploadingFile = fileEntries.find(([_, s]) => s.status === 'uploading');
+
+  const canClose = !uploadingFile;
+  const hasFiles = fileEntries.length > 0;
 
   return (
     <Dialog
       open={open}
       onOpenChange={(o) => {
+        if (!o && uploadingFile) {
+          // Confirm before closing during upload
+          if (!confirm('Upload in progress. Close anyway?')) return;
+          uploadingFile[1].abortController?.abort();
+        }
         setOpen(o);
         if (!o) {
-          setFiles([]);
-          setError(null);
-          setUploadProgress({});
+          clearAllFiles();
           setIsUploading(false);
         }
       }}
     >
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg" showCloseButton={canClose}>
         <DialogHeader>
           <DialogTitle>Add Videos</DialogTitle>
+          {hasFiles && (
+            <DialogDescription>
+              {completedCount > 0 && `${completedCount} uploaded`}
+              {completedCount > 0 &&
+                (pendingCount > 0 || errorCount > 0) &&
+                ' · '}
+              {pendingCount > 0 && `${pendingCount} pending`}
+              {errorCount > 0 && ` · ${errorCount} failed`}
+            </DialogDescription>
+          )}
         </DialogHeader>
 
         <Tabs defaultValue="upload" className="mt-4 min-w-0">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="upload">Upload Files</TabsTrigger>
-            <TabsTrigger value="path">File Path</TabsTrigger>
+            <TabsTrigger value="upload" disabled={isUploading}>
+              Upload Files
+            </TabsTrigger>
+            <TabsTrigger value="path" disabled={isUploading}>
+              File Path
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="upload" className="mt-4 min-w-0">
-            {/* Drop Zone */}
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={handleDrop}
-              className={cn(
-                'flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 transition-colors',
-                isDragging
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-primary/50'
-              )}
-            >
-              <Upload
+            {/* Drop Zone - hide when uploading */}
+            {!isUploading && (
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
                 className={cn(
-                  'mb-3 h-8 w-8',
-                  isDragging ? 'text-primary' : 'text-muted-foreground'
+                  'flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 transition-colors',
+                  isDragging
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/50 hover:bg-muted/50'
                 )}
-              />
-              <p className="mb-1 text-sm font-medium">
-                Drag and drop videos here
-              </p>
-              <p className="text-muted-foreground mb-3 text-xs">
-                or click to browse (multiple allowed)
-              </p>
-              <label>
+              >
+                <Upload
+                  className={cn(
+                    'mb-3 h-8 w-8',
+                    isDragging ? 'text-primary' : 'text-muted-foreground'
+                  )}
+                />
+                <p className="mb-1 text-sm font-medium">
+                  Drag and drop videos here
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  or click to browse
+                </p>
                 <input
+                  ref={fileInputRef}
                   type="file"
                   accept="video/*"
                   multiple
                   onChange={handleFileSelect}
                   className="hidden"
                 />
-                <Button variant="outline" size="sm" asChild>
-                  <span>Browse Files</span>
-                </Button>
-              </label>
-            </div>
+              </div>
+            )}
 
-            {/* Selected Files List */}
-            {files.length > 0 && (
-              <div className="mt-4 min-w-0 space-y-2">
+            {/* Overall Progress Bar when uploading */}
+            {isUploading && uploadingFile && (
+              <div className="bg-muted/30 mb-4 rounded-lg border p-4">
+                <div className="mb-2 flex items-center justify-between text-sm">
+                  <span className="font-medium">
+                    Uploading {completedCount + 1} of {fileEntries.length}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {uploadingFile[1].progress}%
+                  </span>
+                </div>
+                <div className="bg-muted h-2 overflow-hidden rounded-full">
+                  <div
+                    className="bg-primary h-full transition-all duration-300 ease-out"
+                    style={{ width: `${uploadingFile[1].progress}%` }}
+                  />
+                </div>
+                <p className="text-muted-foreground mt-2 truncate text-xs">
+                  {uploadingFile[1].file.name}
+                </p>
+              </div>
+            )}
+
+            {/* File List */}
+            {hasFiles && (
+              <div className={cn('min-w-0 space-y-2', !isUploading && 'mt-4')}>
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">
-                    {files.length} file{files.length !== 1 && 's'} selected
+                    {fileEntries.length} file{fileEntries.length !== 1 && 's'}
                   </span>
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground text-xs">
                       {formatFileSize(totalSize)}
                     </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearFiles}
-                      disabled={isUploading}
-                      className="h-7 px-2 text-xs"
-                    >
-                      Clear all
-                    </Button>
+                    {!isUploading && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearAllFiles}
+                        className="h-7 px-2 text-xs"
+                      >
+                        Clear all
+                      </Button>
+                    )}
                   </div>
                 </div>
 
-                <div className="max-h-48 min-w-0 space-y-2 overflow-y-auto pr-1">
-                  {files.map((file, index) => (
-                    <div
-                      key={`${file.name}-${index}`}
-                      className="bg-muted/50 flex min-w-0 items-center gap-3 rounded-lg border p-3"
-                    >
-                      <File className="text-primary h-8 w-8 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className="truncate text-sm font-medium"
-                          title={file.name}
-                        >
-                          {file.name}
-                        </p>
-                        <p className="text-muted-foreground text-xs">
-                          {formatFileSize(file.size)}
-                        </p>
-                      </div>
-
-                      {/* Status indicator */}
-                      {uploadProgress[file.name] && (
-                        <div className="shrink-0">
-                          {uploadProgress[file.name] === 'uploading' && (
-                            <Loader2 className="text-primary h-4 w-4 animate-spin" />
-                          )}
-                          {uploadProgress[file.name] === 'done' && (
-                            <span className="text-xs text-green-500">✓</span>
-                          )}
-                          {uploadProgress[file.name] === 'error' && (
-                            <span className="text-xs text-red-500">✗</span>
-                          )}
-                        </div>
-                      )}
-
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0"
-                        onClick={() => removeFile(index)}
-                        disabled={isUploading}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
+                <div className="max-h-64 min-w-0 space-y-2 overflow-y-auto pr-1">
+                  {fileEntries.map(([key, state]) => (
+                    <FileUploadItem
+                      key={key}
+                      fileKey={key}
+                      state={state}
+                      onRemove={() => removeFile(key)}
+                      onCancel={() => cancelUpload(key)}
+                      onRetry={() => retryFile(key)}
+                      disabled={isUploading && state.status !== 'uploading'}
+                    />
                   ))}
                 </div>
               </div>
@@ -270,26 +494,34 @@ export function UploadDialog({ onSuccess, children }: UploadDialogProps) {
 
             {error && <p className="text-destructive mt-3 text-sm">{error}</p>}
 
-            <Button
-              className="mt-4 w-full"
-              onClick={handleUpload}
-              disabled={files.length === 0 || isUploading}
-            >
+            <div className="mt-4 flex gap-2">
               {isUploading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Uploading...
-                </>
+                <Button
+                  className="flex-1"
+                  variant="outline"
+                  onClick={() => {
+                    uploadingFile?.[1].abortController?.abort();
+                    setIsUploading(false);
+                  }}
+                >
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Stop Uploading
+                </Button>
               ) : (
-                <>
+                <Button
+                  className="flex-1"
+                  onClick={handleUpload}
+                  disabled={pendingCount === 0}
+                >
                   <Upload className="mr-2 h-4 w-4" />
-                  Upload{' '}
-                  {files.length > 0
-                    ? `${files.length} Video${files.length !== 1 ? 's' : ''}`
-                    : 'Videos'}
-                </>
+                  {pendingCount > 0
+                    ? `Upload ${pendingCount} Video${pendingCount !== 1 ? 's' : ''}`
+                    : completedCount > 0
+                      ? 'All Done!'
+                      : 'Add Videos First'}
+                </Button>
               )}
-            </Button>
+            </div>
           </TabsContent>
 
           <TabsContent value="path" className="mt-4">
@@ -332,5 +564,121 @@ export function UploadDialog({ onSuccess, children }: UploadDialogProps) {
         </Tabs>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface FileUploadItemProps {
+  fileKey: string;
+  state: FileUploadState;
+  onRemove: () => void;
+  onCancel: () => void;
+  onRetry: () => void;
+  disabled: boolean;
+}
+
+function FileUploadItem({
+  state,
+  onRemove,
+  onCancel,
+  onRetry,
+  disabled
+}: FileUploadItemProps) {
+  const { file, status, progress, error } = state;
+
+  return (
+    <div
+      className={cn(
+        'relative overflow-hidden rounded-lg border p-3 transition-colors',
+        status === 'done' && 'border-green-500/30 bg-green-500/5',
+        status === 'error' && 'border-red-500/30 bg-red-500/5',
+        status === 'uploading' && 'border-primary/30 bg-primary/5',
+        (status === 'pending' || status === 'cancelled') && 'bg-muted/50'
+      )}
+    >
+      {/* Progress bar background for uploading state */}
+      {status === 'uploading' && (
+        <div
+          className="bg-primary/10 absolute inset-0 transition-all duration-300"
+          style={{ width: `${progress}%` }}
+        />
+      )}
+
+      <div className="relative flex items-center gap-3">
+        {/* Status Icon */}
+        <div
+          className={cn(
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
+            status === 'done' && 'bg-green-500/20 text-green-500',
+            status === 'error' && 'bg-red-500/20 text-red-500',
+            status === 'uploading' && 'bg-primary/20 text-primary',
+            (status === 'pending' || status === 'cancelled') &&
+              'bg-muted text-muted-foreground'
+          )}
+        >
+          {status === 'done' && <CheckCircle2 className="h-5 w-5" />}
+          {status === 'error' && <AlertCircle className="h-5 w-5" />}
+          {status === 'uploading' && (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          )}
+          {(status === 'pending' || status === 'cancelled') && (
+            <File className="h-5 w-5" />
+          )}
+        </div>
+
+        {/* File Info */}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium" title={file.name}>
+            {file.name}
+          </p>
+          <div className="text-muted-foreground flex items-center gap-2 text-xs">
+            <span>{formatFileSize(file.size)}</span>
+            {status === 'uploading' && <span>· {progress}%</span>}
+            {status === 'done' && (
+              <span className="text-green-500">· Uploaded</span>
+            )}
+            {status === 'error' && (
+              <span className="text-red-500">· {error || 'Failed'}</span>
+            )}
+            {status === 'cancelled' && <span>· Cancelled</span>}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex shrink-0 items-center gap-1">
+          {status === 'error' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRetry}
+              className="h-8 px-2 text-xs"
+            >
+              Retry
+            </Button>
+          )}
+          {status === 'uploading' ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={onCancel}
+            >
+              <XCircle className="h-4 w-4" />
+            </Button>
+          ) : (
+            status !== 'done' && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={onRemove}
+                disabled={disabled}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
