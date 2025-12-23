@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter
 from sqlmodel import select
 
-from app.api.dependencies import (
+from app.core.dependencies import (
     SessionDep,
     EmbeddingDep,
     VectorStoreDep,

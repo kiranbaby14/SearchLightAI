@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File
 from sqlmodel import select, delete
 import shutil
 
-from app.api.dependencies import (
+from app.core.dependencies import (
     SessionDep,
     VideoProcessorDep,
     AudioExtractorDep,

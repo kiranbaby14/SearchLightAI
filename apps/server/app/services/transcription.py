@@ -16,17 +16,20 @@ class TranscriptionService:
         """Initialize transcription service."""
         self._model: WhisperModel | None = None
 
-    @property
-    def model(self) -> WhisperModel:
-        """Lazy load the Whisper model."""
+    def load_models(self) -> None:
+        """Preload Whisper model. Must be called at startup."""
+        logger.info("loading_whisper_model", model=settings.whisper_model)
+        self._model = WhisperModel(
+            settings.whisper_model,
+            device="auto",
+            compute_type="auto",
+        )
+        logger.info("whisper_model_loaded")
+
+    def _get_model(self) -> WhisperModel:
+        """Get model, raising if not loaded."""
         if self._model is None:
-            logger.info("loading_whisper_model", model=settings.whisper_model)
-            self._model = WhisperModel(
-                settings.whisper_model,
-                device="auto",
-                compute_type="auto",
-            )
-            logger.info("whisper_model_loaded")
+            raise RuntimeError("Whisper model not loaded. Call load_models() first.")
         return self._model
 
     def transcribe(
@@ -41,12 +44,12 @@ class TranscriptionService:
         """
         logger.info("transcribing_audio", audio_path=audio_path, language=language)
 
-        segments_result, info = self.model.transcribe(
+        segments_result, info = self._get_model().transcribe(
             audio_path,
             language=language,
             beam_size=5,
             word_timestamps=True,
-            vad_filter=True,  # Filter out non-speech
+            vad_filter=True,
         )
 
         logger.info(
@@ -87,7 +90,7 @@ class TranscriptionService:
             language=language,
         )
 
-        segments_result, info = self.model.transcribe(
+        segments_result, info = self._get_model().transcribe(
             audio_path,
             language=language,
             beam_size=5,

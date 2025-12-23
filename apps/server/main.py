@@ -10,7 +10,13 @@ from app.api import api_router
 from app.core.config import get_settings
 from app.core.database import init_db, check_db_connection
 from app.core.logging import setup_logging, get_logger
-from app.services import VectorStoreService
+from app.core.dependencies import (
+    get_vector_store,
+    get_embedding_service,
+    get_transcription_service,
+)
+
+settings = get_settings()
 
 
 @asynccontextmanager
@@ -26,8 +32,13 @@ async def lifespan(app: FastAPI):
     await check_db_connection()
 
     # Initialize vector store collections
-    vector_store = VectorStoreService()
-    vector_store.init_collections()
+    get_vector_store().init_collections()
+
+    # Preload ML models
+    logger.info("preloading_ml_models")
+    get_embedding_service().load_models()
+    get_transcription_service().load_models()
+    logger.info("ml_models_loaded")
 
     logger.info("application_started")
 
@@ -36,8 +47,6 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("application_shutting_down")
 
-
-settings = get_settings()
 
 app = FastAPI(
     title=settings.app_name,
