@@ -79,6 +79,7 @@ class VideoProcessorService:
         self,
         video_path: str,
         video_id: UUID,
+        duration: float,
         time_percent: float = 0.1,
         width: int = 640,
     ) -> str | None:
@@ -91,10 +92,6 @@ class VideoProcessorService:
         )
 
         try:
-            # Get video duration
-            info = self.get_video_info(video_path)
-            duration = info.get("duration", 0)
-
             # Calculate timestamp (default to 10% into the video, min 0.5s, max 30s)
             timestamp = max(0.5, min(duration * time_percent, 30.0))
 
@@ -144,7 +141,6 @@ class VideoProcessorService:
         self,
         video_path: str,
         video_id: UUID,
-        threshold: float = 27.0,
     ) -> list[dict]:
         """
         Detect scenes and extract keyframes.
@@ -155,7 +151,6 @@ class VideoProcessorService:
             "extracting_keyframes",
             video_path=video_path,
             video_id=str(video_id),
-            threshold=threshold,
         )
 
         # Create output directory for this video
@@ -165,20 +160,11 @@ class VideoProcessorService:
         # Detect scenes using content detector
         scenes = detect(
             video_path,
-            ContentDetector(threshold=threshold),
+            AdaptiveDetector(),
             show_progress=False,
         )
 
         logger.info("scenes_detected", count=len(scenes))
-
-        if not scenes:
-            # If no scenes detected, use adaptive detector
-            scenes = detect(
-                video_path,
-                AdaptiveDetector(),
-                show_progress=False,
-            )
-            logger.info("scenes_detected_adaptive", count=len(scenes))
 
         # Extract keyframes from each scene
         keyframes = []

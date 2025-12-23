@@ -125,7 +125,9 @@ async def upload_video(
     await session.refresh(video)
 
     # Generate thumbnail immediately (before background processing)
-    thumbnail_path = video_processor.extract_thumbnail(str(upload_path), video.id)
+    thumbnail_path = video_processor.extract_thumbnail(
+        str(upload_path), video.id, duration=video_info.get("duration")
+    )
     if thumbnail_path:
         video.thumbnail_path = thumbnail_path
         await session.commit()
@@ -210,14 +212,11 @@ async def process_video_task(
     async with async_session_factory() as session:
         try:
             result = await session.execute(select(Video).where(Video.id == video_id))
-            video = result.scalar_one_or_none()
+            video: Video | None = result.scalar_one_or_none()
 
             if not video:
                 logger.error("video_not_found", video_id=str(video_id))
                 return
-
-            # Initialize vector store collections
-            vector_store.init_collections()
 
             # Step 1: Extract keyframes
             video.mark_processing(VideoStatus.EXTRACTING_FRAMES)

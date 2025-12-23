@@ -20,20 +20,15 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { cn, formatFileSize } from '@/lib/utils';
+import { VideoUploadResponse } from '@/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 interface UploadDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onVideoUploaded?: (response: VideoUploadResponse) => void;
   onComplete?: () => void;
-  children: React.ReactNode;
-}
-
-interface VideoUploadResponse {
-  id: string;
-  filename: string;
-  status: string;
-  message: string;
 }
 
 type FileStatus = 'pending' | 'uploading' | 'done' | 'error' | 'cancelled';
@@ -47,11 +42,11 @@ interface FileUploadState {
 }
 
 export function UploadDialog({
+  open,
+  onOpenChange,
   onVideoUploaded,
-  onComplete,
-  children
+  onComplete
 }: UploadDialogProps) {
-  const [open, setOpen] = useState(false);
   const [fileStates, setFileStates] = useState<Map<string, FileUploadState>>(
     new Map()
   );
@@ -316,14 +311,13 @@ export function UploadDialog({
           if (!confirm('Upload in progress. Close anyway?')) return;
           uploadingFile[1].abortController?.abort();
         }
-        setOpen(o);
+        onOpenChange(o);
         if (!o) {
           clearAllFiles();
           setIsUploading(false);
         }
       }}
     >
-      <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-lg" showCloseButton={canClose}>
         <DialogHeader>
           <DialogTitle>Upload Videos</DialogTitle>

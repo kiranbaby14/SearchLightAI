@@ -13,6 +13,7 @@ export default function VideosPage() {
   const [videos, setVideos] = useState<VideoType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const loadVideos = useCallback(async (showRefresh = false) => {
     if (showRefresh) {
@@ -35,26 +36,24 @@ export default function VideosPage() {
     loadVideos();
   }, [loadVideos]);
 
-  // Poll for updates when there are processing videos
-  useEffect(() => {
-    const hasProcessing = videos.some(
-      (v) => !['completed', 'failed'].includes(v.status)
-    );
+  const hasProcessing = videos.some(
+    (v) => !['completed', 'failed'].includes(v.status)
+  );
 
+  useEffect(() => {
     if (!hasProcessing) return;
 
-    const interval = setInterval(() => loadVideos(), 3000); // Faster polling
+    const interval = setInterval(() => loadVideos(), 3000);
     return () => clearInterval(interval);
-  }, [videos, loadVideos]);
+  }, [hasProcessing, loadVideos]);
 
-  // Handle newly uploaded video - add it optimistically
   const handleVideoUploaded = useCallback(
     (uploadResponse: VideoUploadResponse) => {
-      // Create an optimistic video entry from the upload response
       const optimisticVideo: VideoType = {
         id: uploadResponse.id,
         filename: uploadResponse.filename,
         original_path: '',
+        thumbnail_path: null,
         file_size: null,
         duration: null,
         width: null,
@@ -68,7 +67,6 @@ export default function VideosPage() {
         processed_at: null
       };
 
-      // Add to the beginning of the list if not already there
       setVideos((prev) => {
         const exists = prev.some((v) => v.id === uploadResponse.id);
         if (exists) return prev;
@@ -82,16 +80,13 @@ export default function VideosPage() {
     []
   );
 
-  // Handle upload complete (all files done)
   const handleUploadComplete = useCallback(() => {
-    // Refresh to get accurate data from server
     loadVideos();
   }, [loadVideos]);
 
   const handleDelete = async (id: string) => {
     const video = videos.find((v) => v.id === id);
 
-    // Optimistic delete
     setVideos((prev) => prev.filter((v) => v.id !== id));
 
     try {
@@ -100,13 +95,20 @@ export default function VideosPage() {
     } catch (error) {
       console.error('Failed to delete video:', error);
       toast.error('Failed to delete video');
-      // Revert on error
       loadVideos();
     }
   };
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Single dialog instance - always mounted */}
+      <UploadDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        onVideoUploaded={handleVideoUploaded}
+        onComplete={handleUploadComplete}
+      />
+
       {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
@@ -128,15 +130,10 @@ export default function VideosPage() {
             />
           </Button>
 
-          <UploadDialog
-            onVideoUploaded={handleVideoUploaded}
-            onComplete={handleUploadComplete}
-          >
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Video
-            </Button>
-          </UploadDialog>
+          <Button onClick={() => setUploadOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Video
+          </Button>
         </div>
       </div>
 
@@ -156,24 +153,17 @@ export default function VideosPage() {
             Add your first video to start searching. We&apos;ll automatically
             extract and index all the visual and audio content.
           </p>
-          <UploadDialog
-            onVideoUploaded={handleVideoUploaded}
-            onComplete={handleUploadComplete}
-          >
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Your First Video
-            </Button>
-          </UploadDialog>
+          <Button onClick={() => setUploadOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Your First Video
+          </Button>
         </div>
       ) : (
         <>
           <div className="mb-6">
             <p className="text-muted-foreground text-sm">
               {videos.length} video{videos.length !== 1 && 's'}
-              {videos.some(
-                (v) => !['completed', 'failed'].includes(v.status)
-              ) && (
+              {hasProcessing && (
                 <span className="text-primary ml-2">
                   ·{' '}
                   {

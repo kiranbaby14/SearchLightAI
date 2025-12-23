@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "torch==2.8.0+cu128",
+    "torchvision==0.23.0+cu128",
     "asyncpg>=0.31.0",
     "fastapi>=0.126.0",
     "faster-whisper>=1.2.1",

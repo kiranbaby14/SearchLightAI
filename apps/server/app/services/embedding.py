@@ -33,7 +33,8 @@ class EmbeddingService:
         """Lazy load SigLIP 2 processor."""
         if self._siglip_processor is None:
             self._siglip_processor = AutoProcessor.from_pretrained(
-                settings.siglip_model
+                settings.siglip_model,
+                use_fast=True,
             )
         return self._siglip_processor
 
