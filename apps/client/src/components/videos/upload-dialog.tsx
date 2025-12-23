@@ -263,11 +263,6 @@ export function UploadDialog({
       Array.from(fileStates.values()).some((s) => s.status === 'done')
     ) {
       onComplete?.();
-
-      setTimeout(() => {
-        setOpen(false);
-        setFileStates(new Map());
-      }, 1000);
     }
   };
 

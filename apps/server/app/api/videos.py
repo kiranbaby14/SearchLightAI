@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File
 from sqlmodel import select, delete
+import shutil
 
 from app.api.dependencies import (
     SessionDep,
@@ -173,6 +174,22 @@ async def delete_video(
     # Delete video record
     await session.delete(video)
     await session.commit()
+
+    # Delete uploaded video file
+    if video.original_path:
+        video_file = Path(video.original_path)
+        if video_file.exists():
+            video_file.unlink()
+
+    # Delete frames directory (includes thumbnail)
+    frames_dir = settings.frames_dir / str(video_id)
+    if frames_dir.exists():
+        shutil.rmtree(frames_dir)
+
+    # Delete audio directory
+    audio_dir = settings.audio_dir / str(video_id)
+    if audio_dir.exists():
+        shutil.rmtree(audio_dir)
 
     logger.info("video_deleted", video_id=str(video_id))
 
