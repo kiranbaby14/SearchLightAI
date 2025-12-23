@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Loader2, Video, Sparkles } from 'lucide-react';
 import { SearchBar } from '@/components/search/search-bar';
 import { SearchTypeTabs } from '@/components/search/search-type-tabs';
@@ -9,6 +10,9 @@ import { searchVideos } from '@/lib/api';
 import type { SearchType, SearchResult } from '@/types';
 
 export default function SearchPage() {
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams.get('q') || '';
+
   const [searchType, setSearchType] = useState<SearchType>('hybrid');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -64,7 +68,11 @@ export default function SearchPage() {
 
       {/* Search Section */}
       <div className="mb-8 space-y-6">
-        <SearchBar onSearch={handleSearch} isLoading={isSearching} />
+        <SearchBar
+          onSearch={handleSearch}
+          isLoading={isSearching}
+          initialValue={initialQuery}
+        />
 
         <div className="flex justify-center">
           <SearchTypeTabs value={searchType} onChange={setSearchType} />

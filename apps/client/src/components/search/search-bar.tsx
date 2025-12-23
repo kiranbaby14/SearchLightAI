@@ -10,14 +10,16 @@ interface SearchBarProps {
   onSearch: (query: string) => void;
   isLoading?: boolean;
   placeholder?: string;
+  initialValue?: string;
 }
 
 export function SearchBar({
   onSearch,
   isLoading,
-  placeholder
+  placeholder,
+  initialValue = ''
 }: SearchBarProps) {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialValue);
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 

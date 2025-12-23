@@ -33,11 +33,17 @@ export default function VideoDetailPage() {
   const searchParams = useSearchParams();
   const videoId = params.id as string;
   const startTime = parseFloat(searchParams.get('t') || '0');
+  const searchQuery = searchParams.get('q');
 
   const [video, setVideo] = useState<Video | null>(null);
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Determine back navigation URL based on where user came from
+  const backUrl = searchQuery
+    ? `/?q=${encodeURIComponent(searchQuery)}`
+    : '/videos';
 
   useEffect(() => {
     async function loadData() {
@@ -73,10 +79,10 @@ export default function VideoDetailPage() {
         <div className="text-center">
           <h2 className="mb-2 text-xl font-semibold">Video not found</h2>
           <p className="text-muted-foreground mb-6">{error}</p>
-          <Link href="/videos">
+          <Link href={backUrl}>
             <Button>
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Library
+              Back
             </Button>
           </Link>
         </div>
@@ -94,11 +100,11 @@ export default function VideoDetailPage() {
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Back Button */}
       <Link
-        href="/videos"
+        href={backUrl}
         className="text-muted-foreground hover:text-foreground mb-6 inline-flex items-center gap-2 text-sm transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Library
+        Back
       </Link>
 
       <div className="grid gap-8 lg:grid-cols-3">

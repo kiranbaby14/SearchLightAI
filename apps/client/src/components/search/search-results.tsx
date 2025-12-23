@@ -46,6 +46,7 @@ export function SearchResults({ results, query }: SearchResultsProps) {
           <SearchResultCard
             key={`${result.video_id}-${result.timestamp}-${index}`}
             result={result}
+            query={query}
           />
         ))}
       </div>
@@ -53,7 +54,13 @@ export function SearchResults({ results, query }: SearchResultsProps) {
   );
 }
 
-function SearchResultCard({ result }: { result: SearchResult }) {
+function SearchResultCard({
+  result,
+  query
+}: {
+  result: SearchResult;
+  query: string;
+}) {
   const isVisual = result.result_type === 'visual';
 
   // Build frame URL - frame_path is like "frames/video-id/frame_0000_0.00.jpg"
@@ -61,9 +68,12 @@ function SearchResultCard({ result }: { result: SearchResult }) {
     ? `${STATIC_BASE}/${result.frame_path.replace(/\\/g, '/')}`
     : null;
 
+  // Include query in the URL so we can navigate back to search with context
+  const videoUrl = `/videos/${result.video_id}?t=${result.timestamp}&q=${encodeURIComponent(query)}`;
+
   return (
     <Link
-      href={`/videos/${result.video_id}?t=${result.timestamp}`}
+      href={videoUrl}
       className="group border-border/50 bg-card/50 hover:border-border hover:bg-card flex gap-4 rounded-xl border p-4 transition-all hover:shadow-lg"
     >
       <div className="bg-muted relative flex h-24 w-40 shrink-0 items-center justify-center overflow-hidden rounded-lg">
