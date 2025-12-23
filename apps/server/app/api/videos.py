@@ -1,8 +1,7 @@
 """Video management routes."""
 
 from pathlib import Path
-from uuid import UUID
-
+from uuid import UUID, uuid4
 from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File
 from sqlmodel import select, delete
 
@@ -25,7 +24,7 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.database import async_session_factory
 from app.models import Video, VideoStatus, Transcript
-from app.schemas import VideoCreate, VideoRead, VideoListResponse, VideoUploadResponse
+from app.schemas import VideoRead, VideoListResponse, VideoUploadResponse
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -74,73 +73,6 @@ async def get_video(
     return VideoRead.model_validate(video)
 
 
-@router.post("", response_model=VideoUploadResponse)
-async def add_video(
-    video_data: VideoCreate,
-    session: SessionDep,
-    background_tasks: BackgroundTasks,
-    video_processor: VideoProcessorDep,
-    audio_extractor: AudioExtractorDep,
-    transcription: TranscriptionDep,
-    embedding: EmbeddingDep,
-    vector_store: VectorStoreDep,
-) -> VideoUploadResponse:
-    """Add a video for indexing from a file path."""
-    file_path = Path(video_data.file_path)
-
-    if not file_path.exists():
-        raise HTTPException(status_code=400, detail="Video file not found")
-
-    # Get video info
-    try:
-        video_info = video_processor.get_video_info(str(file_path))
-    except RuntimeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # Create video record first to get the ID
-    video = Video(
-        filename=file_path.name,
-        original_path=str(file_path),
-        file_size=video_info.get("file_size"),
-        duration=video_info.get("duration"),
-        width=video_info.get("width"),
-        height=video_info.get("height"),
-        fps=video_info.get("fps"),
-        status=VideoStatus.PENDING,
-    )
-
-    session.add(video)
-    await session.commit()
-    await session.refresh(video)
-
-    # Generate thumbnail immediately (before background processing)
-    thumbnail_path = video_processor.extract_thumbnail(str(file_path), video.id)
-    if thumbnail_path:
-        video.thumbnail_path = thumbnail_path
-        await session.commit()
-
-    logger.info("video_created", video_id=str(video.id), filename=video.filename)
-
-    # Add background task for processing
-    background_tasks.add_task(
-        process_video_task,
-        video_id=video.id,
-        video_path=str(file_path),
-        video_processor=video_processor,
-        audio_extractor=audio_extractor,
-        transcription=transcription,
-        embedding=embedding,
-        vector_store=vector_store,
-    )
-
-    return VideoUploadResponse(
-        id=video.id,
-        filename=video.filename,
-        status=video.status,
-        message="Video added and queued for processing",
-    )
-
-
 @router.post("/upload", response_model=VideoUploadResponse)
 async def upload_video(
     session: SessionDep,
@@ -156,8 +88,12 @@ async def upload_video(
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
 
-    # Save uploaded file
-    upload_path = settings.upload_dir / file.filename
+    # Generate UUID first so we can use it for the filename
+    video_id = uuid4()
+
+    # Save uploaded file with UUID prefix to avoid duplicates
+    unique_filename = f"{video_id}_{file.filename}"
+    upload_path = settings.upload_dir / unique_filename
 
     with open(upload_path, "wb") as f:
         content = await file.read()
@@ -172,6 +108,7 @@ async def upload_video(
 
     # Create video record first to get the ID
     video = Video(
+        id=video_id,
         filename=file.filename,
         original_path=str(upload_path),
         file_size=video_info.get("file_size"),

@@ -3,6 +3,7 @@
 import subprocess
 from pathlib import Path
 from uuid import UUID
+import json
 
 from scenedetect import detect, ContentDetector, AdaptiveDetector
 from scenedetect.scene_manager import save_images
@@ -42,7 +43,6 @@ class VideoProcessorService:
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            import json
 
             data = json.loads(result.stdout)
 

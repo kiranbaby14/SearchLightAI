@@ -55,15 +55,6 @@ export async function getVideo(id: string): Promise<Video> {
   return fetchApi(`/videos/${id}`);
 }
 
-export async function addVideoByPath(
-  filePath: string
-): Promise<VideoUploadResponse> {
-  return fetchApi('/videos', {
-    method: 'POST',
-    body: JSON.stringify({ file_path: filePath })
-  });
-}
-
 export async function uploadVideo(file: File): Promise<VideoUploadResponse> {
   const formData = new FormData();
   formData.append('file', file);

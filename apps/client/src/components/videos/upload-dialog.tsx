@@ -19,17 +19,12 @@ import {
   DialogDescription
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn, formatFileSize } from '@/lib/utils';
-import { addVideoByPath } from '@/lib/api';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 interface UploadDialogProps {
-  /** Called immediately when each video upload completes with the server response */
   onVideoUploaded?: (response: VideoUploadResponse) => void;
-  /** Called when all uploads are complete (modal closing) */
   onComplete?: () => void;
   children: React.ReactNode;
 }
@@ -60,7 +55,6 @@ export function UploadDialog({
   const [fileStates, setFileStates] = useState<Map<string, FileUploadState>>(
     new Map()
   );
-  const [filePath, setFilePath] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -218,8 +212,6 @@ export function UploadDialog({
         return newMap;
       });
 
-      // Immediately notify parent with the upload response
-      // This allows the video to appear in the list right away
       onVideoUploaded?.(response);
       return true;
     } catch (err) {
@@ -253,9 +245,7 @@ export function UploadDialog({
     setIsUploading(true);
     setError(null);
 
-    // Upload files sequentially (could be parallel if desired)
     for (const [key, state] of pendingFiles) {
-      // Check if file was removed while waiting
       const currentState = fileStates.get(key);
       if (!currentState || currentState.status === 'cancelled') continue;
 
@@ -264,7 +254,6 @@ export function UploadDialog({
 
     setIsUploading(false);
 
-    // Check if all files are done
     const allDone = Array.from(fileStates.values()).every(
       (s) => s.status === 'done' || s.status === 'cancelled'
     );
@@ -273,10 +262,8 @@ export function UploadDialog({
       allDone &&
       Array.from(fileStates.values()).some((s) => s.status === 'done')
     ) {
-      // Notify parent that all uploads are complete
       onComplete?.();
 
-      // Auto-close after a short delay if all successful
       setTimeout(() => {
         setOpen(false);
         setFileStates(new Map());
@@ -284,27 +271,7 @@ export function UploadDialog({
     }
   };
 
-  const handleAddByPath = async () => {
-    if (!filePath.trim()) return;
-
-    setIsUploading(true);
-    setError(null);
-
-    try {
-      const response = await addVideoByPath(filePath.trim());
-      onVideoUploaded?.(response as unknown as VideoUploadResponse);
-      onComplete?.();
-      setOpen(false);
-      setFilePath('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add video');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
   const clearAllFiles = () => {
-    // Cancel any in-progress uploads
     fileStates.forEach((state) => {
       if (state.abortController) {
         state.abortController.abort();
@@ -351,7 +318,6 @@ export function UploadDialog({
       open={open}
       onOpenChange={(o) => {
         if (!o && uploadingFile) {
-          // Confirm before closing during upload
           if (!confirm('Upload in progress. Close anyway?')) return;
           uploadingFile[1].abortController?.abort();
         }
@@ -365,7 +331,7 @@ export function UploadDialog({
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-lg" showCloseButton={canClose}>
         <DialogHeader>
-          <DialogTitle>Add Videos</DialogTitle>
+          <DialogTitle>Upload Videos</DialogTitle>
           {hasFiles && (
             <DialogDescription>
               {completedCount > 0 && `${completedCount} uploaded`}
@@ -378,190 +344,141 @@ export function UploadDialog({
           )}
         </DialogHeader>
 
-        <Tabs defaultValue="upload" className="mt-4 min-w-0">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="upload" disabled={isUploading}>
-              Upload Files
-            </TabsTrigger>
-            <TabsTrigger value="path" disabled={isUploading}>
-              File Path
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="upload" className="mt-4 min-w-0">
-            {/* Drop Zone - hide when uploading */}
-            {!isUploading && (
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={cn(
-                  'flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 transition-colors',
-                  isDragging
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-primary/50 hover:bg-muted/50'
-                )}
-              >
-                <Upload
-                  className={cn(
-                    'mb-3 h-8 w-8',
-                    isDragging ? 'text-primary' : 'text-muted-foreground'
-                  )}
-                />
-                <p className="mb-1 text-sm font-medium">
-                  Drag and drop videos here
-                </p>
-                <p className="text-muted-foreground text-xs">
-                  or click to browse
-                </p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="video/*"
-                  multiple
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-              </div>
-            )}
-
-            {/* Overall Progress Bar when uploading */}
-            {isUploading && uploadingFile && (
-              <div className="bg-muted/30 mb-4 rounded-lg border p-4">
-                <div className="mb-2 flex items-center justify-between text-sm">
-                  <span className="font-medium">
-                    Uploading {completedCount + 1} of {fileEntries.length}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {uploadingFile[1].progress}%
-                  </span>
-                </div>
-                <div className="bg-muted h-2 overflow-hidden rounded-full">
-                  <div
-                    className="bg-primary h-full transition-all duration-300 ease-out"
-                    style={{ width: `${uploadingFile[1].progress}%` }}
-                  />
-                </div>
-                <p className="text-muted-foreground mt-2 truncate text-xs">
-                  {uploadingFile[1].file.name}
-                </p>
-              </div>
-            )}
-
-            {/* File List */}
-            {hasFiles && (
-              <div className={cn('min-w-0 space-y-2', !isUploading && 'mt-4')}>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">
-                    {fileEntries.length} file{fileEntries.length !== 1 && 's'}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground text-xs">
-                      {formatFileSize(totalSize)}
-                    </span>
-                    {!isUploading && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={clearAllFiles}
-                        className="h-7 px-2 text-xs"
-                      >
-                        Clear all
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="max-h-64 min-w-0 space-y-2 overflow-y-auto pr-1">
-                  {fileEntries.map(([key, state]) => (
-                    <FileUploadItem
-                      key={key}
-                      fileKey={key}
-                      state={state}
-                      onRemove={() => removeFile(key)}
-                      onCancel={() => cancelUpload(key)}
-                      onRetry={() => retryFile(key)}
-                      disabled={isUploading && state.status !== 'uploading'}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {error && <p className="text-destructive mt-3 text-sm">{error}</p>}
-
-            <div className="mt-4 flex gap-2">
-              {isUploading ? (
-                <Button
-                  className="flex-1"
-                  variant="outline"
-                  onClick={() => {
-                    uploadingFile?.[1].abortController?.abort();
-                    setIsUploading(false);
-                  }}
-                >
-                  <XCircle className="mr-2 h-4 w-4" />
-                  Stop Uploading
-                </Button>
-              ) : (
-                <Button
-                  className="flex-1"
-                  onClick={handleUpload}
-                  disabled={pendingCount === 0}
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  {pendingCount > 0
-                    ? `Upload ${pendingCount} Video${pendingCount !== 1 ? 's' : ''}`
-                    : completedCount > 0
-                      ? 'All Done!'
-                      : 'Add Videos First'}
-                </Button>
+        <div className="mt-4 min-w-0">
+          {/* Drop Zone */}
+          {!isUploading && (
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={cn(
+                'flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 transition-colors',
+                isDragging
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-primary/50 hover:bg-muted/50'
               )}
+            >
+              <Upload
+                className={cn(
+                  'mb-3 h-8 w-8',
+                  isDragging ? 'text-primary' : 'text-muted-foreground'
+                )}
+              />
+              <p className="mb-1 text-sm font-medium">
+                Drag and drop videos here
+              </p>
+              <p className="text-muted-foreground text-xs">
+                or click to browse
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+              />
             </div>
-          </TabsContent>
+          )}
 
-          <TabsContent value="path" className="mt-4">
-            <div className="space-y-4">
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Video File Path
-                </label>
-                <Input
-                  placeholder="/path/to/your/video.mp4"
-                  value={filePath}
-                  onChange={(e) => {
-                    setFilePath(e.target.value);
-                    setError(null);
-                  }}
+          {/* Overall Progress Bar when uploading */}
+          {isUploading && uploadingFile && (
+            <div className="bg-muted/30 mb-4 rounded-lg border p-4">
+              <div className="mb-2 flex items-center justify-between text-sm">
+                <span className="font-medium">
+                  Uploading {completedCount + 1} of {fileEntries.length}
+                </span>
+                <span className="text-muted-foreground">
+                  {uploadingFile[1].progress}%
+                </span>
+              </div>
+              <div className="bg-muted h-2 overflow-hidden rounded-full">
+                <div
+                  className="bg-primary h-full transition-all duration-300 ease-out"
+                  style={{ width: `${uploadingFile[1].progress}%` }}
                 />
-                <p className="text-muted-foreground mt-2 text-xs">
-                  Enter the full path to a video file on the server
-                </p>
+              </div>
+              <p className="text-muted-foreground mt-2 truncate text-xs">
+                {uploadingFile[1].file.name}
+              </p>
+            </div>
+          )}
+
+          {/* File List */}
+          {hasFiles && (
+            <div className={cn('min-w-0 space-y-2', !isUploading && 'mt-4')}>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">
+                  {fileEntries.length} file{fileEntries.length !== 1 && 's'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground text-xs">
+                    {formatFileSize(totalSize)}
+                  </span>
+                  {!isUploading && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearAllFiles}
+                      className="h-7 px-2 text-xs"
+                    >
+                      Clear all
+                    </Button>
+                  )}
+                </div>
               </div>
 
-              {error && <p className="text-destructive text-sm">{error}</p>}
-
-              <Button
-                className="w-full"
-                onClick={handleAddByPath}
-                disabled={!filePath.trim() || isUploading}
-              >
-                {isUploading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Adding...
-                  </>
-                ) : (
-                  'Add Video'
-                )}
-              </Button>
+              <div className="max-h-64 min-w-0 space-y-2 overflow-y-auto pr-1">
+                {fileEntries.map(([key, state]) => (
+                  <FileUploadItem
+                    key={key}
+                    fileKey={key}
+                    state={state}
+                    onRemove={() => removeFile(key)}
+                    onCancel={() => cancelUpload(key)}
+                    onRetry={() => retryFile(key)}
+                    disabled={isUploading && state.status !== 'uploading'}
+                  />
+                ))}
+              </div>
             </div>
-          </TabsContent>
-        </Tabs>
+          )}
+
+          {error && <p className="text-destructive mt-3 text-sm">{error}</p>}
+
+          <div className="mt-4 flex gap-2">
+            {isUploading ? (
+              <Button
+                className="flex-1"
+                variant="outline"
+                onClick={() => {
+                  uploadingFile?.[1].abortController?.abort();
+                  setIsUploading(false);
+                }}
+              >
+                <XCircle className="mr-2 h-4 w-4" />
+                Stop Uploading
+              </Button>
+            ) : (
+              <Button
+                className="flex-1"
+                onClick={handleUpload}
+                disabled={pendingCount === 0}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                {pendingCount > 0
+                  ? `Upload ${pendingCount} Video${pendingCount !== 1 ? 's' : ''}`
+                  : completedCount > 0
+                    ? 'All Done!'
+                    : 'Add Videos First'}
+              </Button>
+            )}
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -595,7 +512,6 @@ function FileUploadItem({
         (status === 'pending' || status === 'cancelled') && 'bg-muted/50'
       )}
     >
-      {/* Progress bar background for uploading state */}
       {status === 'uploading' && (
         <div
           className="bg-primary/10 absolute inset-0 transition-all duration-300"
@@ -604,7 +520,6 @@ function FileUploadItem({
       )}
 
       <div className="relative flex items-center gap-3">
-        {/* Status Icon */}
         <div
           className={cn(
             'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
@@ -625,7 +540,6 @@ function FileUploadItem({
           )}
         </div>
 
-        {/* File Info */}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium" title={file.name}>
             {file.name}
@@ -643,7 +557,6 @@ function FileUploadItem({
           </div>
         </div>
 
-        {/* Actions */}
         <div className="flex shrink-0 items-center gap-1">
           {status === 'error' && (
             <Button

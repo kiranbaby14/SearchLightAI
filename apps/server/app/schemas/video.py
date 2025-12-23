@@ -8,12 +8,6 @@ from pydantic import BaseModel, ConfigDict
 from app.models.video import VideoStatus
 
 
-class VideoCreate(BaseModel):
-    """Schema for creating a video."""
-
-    file_path: str
-
-
 class VideoRead(BaseModel):
     """Schema for reading video data."""
 
