@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
@@ -35,6 +36,18 @@ async def init_db() -> None:
     async with async_engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
     logger.info("database_initialized")
+
+
+async def check_db_connection() -> None:
+    """Verify database connection on startup."""
+    logger.info("checking_database_connection")
+    try:
+        async with async_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        logger.info("database_connected")
+    except Exception as e:
+        logger.error("database_connection_failed", error=str(e))
+        raise
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

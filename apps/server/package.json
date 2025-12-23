@@ -3,8 +3,12 @@
     "version": "1.0.0",
     "private": true,
     "scripts": {
-      "dev": "uv run uvicorn main:app --reload",
-      "start": "uv run uvicorn main:app",
+      "dev": "uv run alembic upgrade head && uv run uvicorn main:app --reload",
+      "start": "uv run alembic upgrade head && uv run uvicorn main:app",
+      "db:revision": "uv run alembic revision --autogenerate -m",
+      "db:upgrade": "uv run alembic upgrade head",
+      "db:downgrade": "uv run alembic downgrade -1",
+      "db:history": "uv run alembic history",
       "format": "uv run ruff format .",
       "format:check": "uv run ruff format --check ."
     }

@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import api_router
 from app.core.config import get_settings
-from app.core.database import init_db
+from app.core.database import init_db, check_db_connection
 from app.core.logging import setup_logging, get_logger
 from app.services import VectorStoreService
 
@@ -22,7 +22,8 @@ async def lifespan(app: FastAPI):
     logger.info("application_starting", app_name=settings.app_name)
 
     # Initialize database
-    await init_db()
+    # await init_db() - Now alembic is used
+    await check_db_connection()
 
     # Initialize vector store collections
     vector_store = VectorStoreService()

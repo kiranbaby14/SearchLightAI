@@ -21,6 +21,7 @@ dependencies = [
     "python-multipart>=0.0.21",
     "uvicorn>=0.38.0",
     "sentencepiece>=0.2.1",
+    "alembic>=1.17.2",
 ]
 
 [build-system]
