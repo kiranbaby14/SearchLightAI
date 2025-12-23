@@ -2,8 +2,8 @@
 
 from fastapi import APIRouter
 
-from app.api.videos import router as videos_router
-from app.api.search import router as search_router
+from .videos import router as videos_router
+from .search import router as search_router
 
 api_router = APIRouter()
 

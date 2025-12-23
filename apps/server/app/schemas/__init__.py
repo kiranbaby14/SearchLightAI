@@ -1,11 +1,11 @@
 """API schemas."""
 
-from app.schemas.video import (
+from .video import (
     VideoRead,
     VideoListResponse,
     VideoUploadResponse,
 )
-from app.schemas.search import (
+from .search import (
     SearchQuery,
     SearchResult,
     SearchResponse,

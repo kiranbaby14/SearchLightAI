@@ -4,11 +4,14 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID, uuid4
 
+from sqlalchemy import Column, DateTime
 from sqlmodel import SQLModel, Field, Relationship
 from typing import TYPE_CHECKING
 
+from app.utils import utc_now
+
 if TYPE_CHECKING:
-    from app.models.transcript import Transcript
+    from .transcript import Transcript
 
 
 class VideoStatus(str, Enum):
@@ -45,9 +48,18 @@ class Video(SQLModel, table=True):
     frame_count: int = Field(default=0)
     keyframe_count: int = Field(default=0)
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-    processed_at: datetime | None = None
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    processed_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
 
     # Relationships
     transcripts: list["Transcript"] = Relationship(back_populates="video")
@@ -55,16 +67,16 @@ class Video(SQLModel, table=True):
     def mark_processing(self, status: VideoStatus) -> None:
         """Update status and timestamp."""
         self.status = status
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()
 
     def mark_completed(self) -> None:
         """Mark video as successfully processed."""
         self.status = VideoStatus.COMPLETED
-        self.updated_at = datetime.utcnow()
-        self.processed_at = datetime.utcnow()
+        self.updated_at = utc_now()
+        self.processed_at = utc_now()
 
     def mark_failed(self, error: str) -> None:
         """Mark video as failed with error message."""
         self.status = VideoStatus.FAILED
         self.error_message = error
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()

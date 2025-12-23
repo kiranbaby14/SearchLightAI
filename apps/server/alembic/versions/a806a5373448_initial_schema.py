@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: 8d2bed558674
+Revision ID: a806a5373448
 Revises:
-Create Date: 2025-12-23 10:09:15.927399
+Create Date: 2025-12-23 17:23:04.413161
 
 """
 
@@ -14,7 +14,7 @@ import sqlmodel
 
 
 # revision identifiers, used by Alembic.
-revision: str = "8d2bed558674"
+revision: str = "a806a5373448"
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -52,9 +52,9 @@ def upgrade() -> None:
         sa.Column("error_message", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.Column("frame_count", sa.Integer(), nullable=False),
         sa.Column("keyframe_count", sa.Integer(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.Column("processed_at", sa.DateTime(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("processed_at", sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_videos_filename"), "videos", ["filename"], unique=False)
@@ -69,7 +69,7 @@ def upgrade() -> None:
         sa.Column("confidence", sa.Float(), nullable=True),
         sa.Column("language", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.Column("search_vector", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(
             ["video_id"],
             ["videos.id"],

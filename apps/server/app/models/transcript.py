@@ -3,11 +3,14 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
+from sqlalchemy import Column, DateTime
 from sqlmodel import SQLModel, Field, Relationship
 from typing import TYPE_CHECKING
 
+from app.utils import utc_now
+
 if TYPE_CHECKING:
-    from app.models.video import Video
+    from .video import Video
 
 
 class Transcript(SQLModel, table=True):
@@ -28,7 +31,10 @@ class Transcript(SQLModel, table=True):
     # For full-text search
     search_vector: str | None = Field(default=None, sa_column_kwargs={"index": True})
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
 
     # Relationships
     video: "Video" = Relationship(back_populates="transcripts")
