@@ -32,6 +32,7 @@ class Video(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     filename: str = Field(index=True)
     original_path: str
+    thumbnail_path: str | None = None
     file_size: int | None = None
     duration: float | None = None  # Duration in seconds
     width: int | None = None

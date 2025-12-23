@@ -12,6 +12,7 @@ export interface Video {
   id: string;
   filename: string;
   original_path: string;
+  thumbnail_path: string | null;
   file_size: number | null;
   duration: number | null;
   width: number | null;

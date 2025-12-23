@@ -22,6 +22,7 @@ class VideoRead(BaseModel):
     id: UUID
     filename: str
     original_path: str
+    thumbnail_path: str | None
     file_size: int | None
     duration: float | None
     width: int | None

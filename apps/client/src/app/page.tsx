@@ -57,7 +57,7 @@ export default function SearchPage() {
         </h1>
 
         <p className="text-muted-foreground mx-auto max-w-2xl text-lg">
-          Search by describing what you see or what was said. Our AI understands
+          Search by describing what you see or what was said. AI understands
           both visual content and speech to find exactly what you need.
         </p>
       </div>

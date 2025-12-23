@@ -18,6 +18,9 @@ import {
 import type { Video } from '@/types';
 import { cn } from '@/lib/utils';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const STATIC_BASE = API_BASE.replace('/api', '');
+
 interface VideoCardProps {
   video: Video;
   onDelete?: (id: string) => void;
@@ -26,7 +29,11 @@ interface VideoCardProps {
 export function VideoCard({ video, onDelete }: VideoCardProps) {
   const isProcessing = !['completed', 'failed'].includes(video.status);
   const hasFailed = video.status === 'failed';
-  const isNewlyAdded = isProcessing && video.status === 'pending';
+
+  // Build thumbnail URL from thumbnail_path
+  const thumbnailUrl = video.thumbnail_path
+    ? `${STATIC_BASE}/${video.thumbnail_path.replace(/\\/g, '/')}`
+    : null;
 
   return (
     <div
@@ -49,15 +56,25 @@ export function VideoCard({ video, onDelete }: VideoCardProps) {
 
       <Link href={`/videos/${video.id}`} className="relative block">
         <div className="bg-muted relative aspect-video w-full overflow-hidden">
-          <div className="flex h-full items-center justify-center">
-            <FileVideo
-              className={cn(
-                'h-12 w-12',
-                isProcessing ? 'text-primary/50' : 'text-muted-foreground/50'
-              )}
+          {/* Thumbnail or placeholder */}
+          {thumbnailUrl ? (
+            <img
+              src={thumbnailUrl}
+              alt={video.filename}
+              className="h-full w-full object-cover"
             />
-          </div>
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <FileVideo
+                className={cn(
+                  'h-12 w-12',
+                  isProcessing ? 'text-primary/50' : 'text-muted-foreground/50'
+                )}
+              />
+            </div>
+          )}
 
+          {/* Play button overlay on hover (only for completed videos) */}
           {video.status === 'completed' && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
               <div className="rounded-full bg-white/20 p-3 backdrop-blur-sm">
@@ -66,6 +83,7 @@ export function VideoCard({ video, onDelete }: VideoCardProps) {
             </div>
           )}
 
+          {/* Duration badge */}
           {video.duration && (
             <div className="absolute right-2 bottom-2 flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white">
               <Clock className="h-3 w-3" />
@@ -73,6 +91,7 @@ export function VideoCard({ video, onDelete }: VideoCardProps) {
             </div>
           )}
 
+          {/* Processing/Failed overlay */}
           {(isProcessing || hasFailed) && (
             <div
               className={cn(

@@ -97,7 +97,7 @@ async def add_video(
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Create video record
+    # Create video record first to get the ID
     video = Video(
         filename=file_path.name,
         original_path=str(file_path),
@@ -112,6 +112,12 @@ async def add_video(
     session.add(video)
     await session.commit()
     await session.refresh(video)
+
+    # Generate thumbnail immediately (before background processing)
+    thumbnail_path = video_processor.extract_thumbnail(str(file_path), video.id)
+    if thumbnail_path:
+        video.thumbnail_path = thumbnail_path
+        await session.commit()
 
     logger.info("video_created", video_id=str(video.id), filename=video.filename)
 
@@ -164,7 +170,7 @@ async def upload_video(
         upload_path.unlink()  # Clean up
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Create video record
+    # Create video record first to get the ID
     video = Video(
         filename=file.filename,
         original_path=str(upload_path),
@@ -179,6 +185,12 @@ async def upload_video(
     session.add(video)
     await session.commit()
     await session.refresh(video)
+
+    # Generate thumbnail immediately (before background processing)
+    thumbnail_path = video_processor.extract_thumbnail(str(upload_path), video.id)
+    if thumbnail_path:
+        video.thumbnail_path = thumbnail_path
+        await session.commit()
 
     logger.info("video_uploaded", video_id=str(video.id), filename=video.filename)
 

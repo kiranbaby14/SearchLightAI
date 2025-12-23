@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Search, Loader2, Sparkles } from 'lucide-react';
+import Link from 'next/link';
+
 import { cn } from '@/lib/utils';
 
 interface SearchBarProps {
@@ -81,14 +83,11 @@ export function SearchBar({
       </div>
 
       <p className="text-muted-foreground mt-3 text-center text-sm">
-        Search by visual content{' '}
-        <span className="text-muted-foreground/60">
-          &quot;person near red car&quot;
-        </span>{' '}
-        or speech{' '}
-        <span className="text-muted-foreground/60">
-          &quot;when I mentioned budget&quot;
-        </span>
+        Search your{' '}
+        <Link href="/videos" className="text-primary hover:underline">
+          video library
+        </Link>{' '}
+        by visual content or speech
       </p>
     </form>
   );

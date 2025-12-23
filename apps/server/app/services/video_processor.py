@@ -75,6 +75,71 @@ class VideoProcessorService:
             logger.error("ffprobe_failed", error=str(e))
             raise RuntimeError(f"Failed to get video info: {e}")
 
+    def extract_thumbnail(
+        self,
+        video_path: str,
+        video_id: UUID,
+        time_percent: float = 0.1,
+        width: int = 640,
+    ) -> str | None:
+        """Extract a thumbnail at a percentage of video duration."""
+        logger.info(
+            "extracting_thumbnail",
+            video_path=video_path,
+            video_id=str(video_id),
+            time_percent=time_percent,
+        )
+
+        try:
+            # Get video duration
+            info = self.get_video_info(video_path)
+            duration = info.get("duration", 0)
+
+            # Calculate timestamp (default to 10% into the video, min 0.5s, max 30s)
+            timestamp = max(0.5, min(duration * time_percent, 30.0))
+
+            # Create output directory
+            output_dir = self.frames_dir / str(video_id)
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            thumbnail_path = output_dir / "thumbnail.jpg"
+
+            cmd = [
+                "ffmpeg",
+                "-ss",
+                str(timestamp),
+                "-i",
+                video_path,
+                "-vframes",
+                "1",
+                "-vf",
+                f"scale={width}:-1",  # Scale width, auto height
+                "-q:v",
+                "2",  # High quality JPEG
+                "-y",  # Overwrite if exists
+                str(thumbnail_path),
+            ]
+
+            subprocess.run(cmd, capture_output=True, check=True)
+
+            logger.info("thumbnail_extracted", path=str(thumbnail_path))
+            return str(thumbnail_path)
+
+        except subprocess.CalledProcessError as e:
+            logger.warning(
+                "thumbnail_extraction_failed",
+                video_id=str(video_id),
+                error=e.stderr.decode() if e.stderr else str(e),
+            )
+            return None
+        except Exception as e:
+            logger.warning(
+                "thumbnail_extraction_error",
+                video_id=str(video_id),
+                error=str(e),
+            )
+            return None
+
     def extract_keyframes(
         self,
         video_path: str,
