@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     audio_dir: Path = Path("./audio")
 
     # AI Models
-    siglip_model: str = "google/siglip-base-patch16-224"
+    siglip_model: str = "google/siglip2-base-patch16-512"
     sentence_transformer_model: str = "all-MiniLM-L6-v2"
     whisper_model: str = "base"
 

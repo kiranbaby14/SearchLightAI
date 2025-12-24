@@ -11,8 +11,9 @@ from app.core.dependencies import (
     VectorStoreDep,
 )
 from app.core.logging import get_logger
-from app.models import Video
+from app.models import Video, Transcript
 from app.schemas import SearchQuery, SearchResult, SearchResponse, SearchType
+from app.utils import rescale_siglip_score
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -75,13 +76,15 @@ async def search_videos(
     for r in results:
         video = videos.get(r["video_id"])
         if video:
+            display_score = rescale_siglip_score(r["score"])
+
             search_results.append(
                 SearchResult(
                     video_id=UUID(r["video_id"]),
                     video_filename=video.filename,
                     timestamp=r["timestamp"],
                     end_timestamp=r.get("end_timestamp"),
-                    score=r["score"],
+                    score=display_score,
                     result_type=r["type"],
                     transcript_text=r.get("text"),
                     frame_path=r.get("frame_path"),
@@ -104,7 +107,6 @@ async def get_video_transcript(
     session: SessionDep,
 ) -> dict:
     """Get full transcript for a video."""
-    from app.models import Transcript
 
     result = await session.execute(
         select(Transcript)
