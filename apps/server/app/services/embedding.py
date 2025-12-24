@@ -1,13 +1,8 @@
 """Embedding service for visual and text embeddings."""
 
 import torch
-import torch.nn.functional as F
 from PIL import Image
-from transformers import (
-    AutoProcessor,
-    SiglipVisionModel,
-    SiglipTextModel,
-)
+from transformers import AutoProcessor, AutoModel
 from sentence_transformers import SentenceTransformer
 
 from app.core.config import get_settings
@@ -22,9 +17,8 @@ class EmbeddingService:
 
     def __init__(self) -> None:
         """Initialize embedding service."""
-        self._siglip_processor: AutoProcessor | None = None
-        self._siglip_vision: SiglipVisionModel | None = None
-        self._siglip_text: SiglipTextModel | None = None
+        self._processor: AutoProcessor | None = None
+        self._model: AutoModel | None = None
         self._sentence_model: SentenceTransformer | None = None
         self._device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -32,28 +26,20 @@ class EmbeddingService:
         """Preload all models. Must be called at startup."""
         logger.info("loading_embedding_models", device=self._device)
 
-        # Load SigLIP processor
-        logger.info("loading_siglip_processor", model=settings.siglip_model)
-        self._siglip_processor = AutoProcessor.from_pretrained(
+        # Load SigLIP2 (unified model for both vision and text)
+        logger.info("loading_siglip2_model", model=settings.siglip_model)
+        self._processor = AutoProcessor.from_pretrained(
             settings.siglip_model,
-            use_fast=True,  # rust based tokenizer
+            use_fast=True,
         )
-
-        # Load SigLIP vision model
-        logger.info("loading_siglip_vision", model=settings.siglip_model)
-        self._siglip_vision = SiglipVisionModel.from_pretrained(
-            settings.siglip_model
+        self._model = AutoModel.from_pretrained(
+            settings.siglip_model,
+            dtype=torch.float16,
+            attn_implementation="sdpa",
         ).to(self._device)
-        self._siglip_vision.eval()
+        self._model.eval()
 
-        # Load SigLIP text model
-        logger.info("loading_siglip_text", model=settings.siglip_model)
-        self._siglip_text = SiglipTextModel.from_pretrained(settings.siglip_model).to(
-            self._device
-        )
-        self._siglip_text.eval()
-
-        # Load sentence transformer
+        # Load sentence transformer for speech embeddings
         logger.info("loading_sentence_model", model=settings.sentence_transformer_model)
         self._sentence_model = SentenceTransformer(
             settings.sentence_transformer_model,
@@ -62,43 +48,32 @@ class EmbeddingService:
 
         logger.info("embedding_models_loaded")
 
+    def _get_model(self) -> AutoModel:
+        if self._model is None:
+            raise RuntimeError("Models not loaded. Call load_models() first.")
+        return self._model
+
     def _get_processor(self) -> AutoProcessor:
-        if self._siglip_processor is None:
+        if self._processor is None:
             raise RuntimeError("Models not loaded. Call load_models() first.")
-        return self._siglip_processor
-
-    def _get_vision_model(self) -> SiglipVisionModel:
-        if self._siglip_vision is None:
-            raise RuntimeError("Models not loaded. Call load_models() first.")
-        return self._siglip_vision
-
-    def _get_text_model(self) -> SiglipTextModel:
-        if self._siglip_text is None:
-            raise RuntimeError("Models not loaded. Call load_models() first.")
-        return self._siglip_text
+        return self._processor
 
     def _get_sentence_model(self) -> SentenceTransformer:
         if self._sentence_model is None:
             raise RuntimeError("Models not loaded. Call load_models() first.")
         return self._sentence_model
 
-    def _normalize(self, embeddings: torch.Tensor) -> torch.Tensor:
-        """L2 normalize embeddings for cosine similarity."""
-        return F.normalize(embeddings, p=2, dim=-1)
-
     def embed_image(self, image_path: str) -> list[float]:
-        """Generate embedding for an image using SigLIP Vision Model."""
+        """Generate embedding for an image using SigLIP2."""
         image = Image.open(image_path).convert("RGB")
         inputs = self._get_processor()(images=image, return_tensors="pt").to(
             self._device
         )
 
         with torch.no_grad():
-            outputs = self._get_vision_model()(**inputs)
-            normalized = self._normalize(outputs.pooler_output)
-            embedding = normalized[0].cpu().numpy().tolist()
+            image_features = self._get_model().get_image_features(**inputs)
 
-        return embedding
+        return image_features[0].cpu().float().numpy().tolist()
 
     def embed_images_batch(
         self,
@@ -109,8 +84,8 @@ class EmbeddingService:
         logger.info("embedding_images_batch", count=len(image_paths))
         all_embeddings = []
 
+        model = self._get_model()
         processor = self._get_processor()
-        vision_model = self._get_vision_model()
 
         for i in range(0, len(image_paths), batch_size):
             batch_paths = image_paths[i : i + batch_size]
@@ -125,34 +100,33 @@ class EmbeddingService:
             if not images:
                 continue
 
-            inputs = processor(
-                images=images,
-                return_tensors="pt",
-                padding=True,
-            ).to(self._device)
+            inputs = processor(images=images, return_tensors="pt", padding=True).to(
+                self._device
+            )
 
             with torch.no_grad():
-                outputs = vision_model(**inputs)
-                normalized = self._normalize(outputs.pooler_output)
-                embeddings = normalized.cpu().numpy().tolist()
+                image_features = model.get_image_features(**inputs)
+                embeddings = image_features.cpu().float().numpy().tolist()
                 all_embeddings.extend(embeddings)
 
         return all_embeddings
 
     def embed_text_visual(self, text: str) -> list[float]:
-        """Generate visual-compatible embedding for text queries (SigLIP)."""
+        """Generate visual-compatible embedding for text queries (SigLIP2)."""
+        # IMPORTANT: Model was trained with lowercased text
+        text = text.lower()
+
         inputs = self._get_processor()(
             text=[text],
             padding="max_length",
+            max_length=64,
             return_tensors="pt",
         ).to(self._device)
 
         with torch.no_grad():
-            outputs = self._get_text_model()(**inputs)
-            normalized = self._normalize(outputs.pooler_output)
-            embedding = normalized[0].cpu().numpy().tolist()
+            text_features = self._get_model().get_text_features(**inputs)
 
-        return embedding
+        return text_features[0].cpu().float().numpy().tolist()
 
     def embed_text(self, text: str) -> list[float]:
         """Generate text embedding for semantic search (Sentence-Transformers)."""
