@@ -30,9 +30,6 @@ class Settings(BaseSettings):
     qdrant_port: int = 6333
     qdrant_api_key: str | None = None
 
-    # Redis
-    redis_url: str = "redis://localhost:6379/0"
-
     # Storage paths
     upload_dir: Path = Path("./uploads")
     frames_dir: Path = Path("./frames")
