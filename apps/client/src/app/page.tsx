@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Loader2, Video, Sparkles } from 'lucide-react';
 import { SearchBar } from '@/components/search/search-bar';
@@ -9,7 +9,7 @@ import { SearchResults } from '@/components/search/search-results';
 import { searchVideos } from '@/lib/api';
 import type { SearchType, SearchResult } from '@/types';
 
-export default function SearchPage() {
+function SearchPageContent() {
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get('q') || '';
 
@@ -102,5 +102,24 @@ export default function SearchPage() {
         )}
       </div>
     </div>
+  );
+}
+
+function SearchPageFallback() {
+  return (
+    <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
+      <div className="flex flex-col items-center justify-center py-16">
+        <Loader2 className="text-primary mb-4 h-8 w-8 animate-spin" />
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<SearchPageFallback />}>
+      <SearchPageContent />
+    </Suspense>
   );
 }

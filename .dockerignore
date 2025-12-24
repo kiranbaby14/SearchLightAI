@@ -1,0 +1,48 @@
+# Dependencies
+node_modules
+**/node_modules
+**/.pnpm-store
+
+# Python
+**/__pycache__
+**/*.pyc
+**/.venv
+**/.uv
+
+# Build outputs
+**/.next
+**/out
+**/build
+**/dist
+
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment files - NEVER bake into images
+.env
+**/.env
+**/.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+**/coverage
+**/.nyc_output
+
+# Misc
+*.md
+!README.md
+LICENSE

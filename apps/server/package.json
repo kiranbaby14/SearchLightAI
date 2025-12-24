@@ -3,8 +3,10 @@
     "version": "1.0.0",
     "private": true,
     "scripts": {
-      "dev": "uv run alembic upgrade head && uv run uvicorn main:app --reload",
+      "dev": "pnpm run qdrant:start && uv run alembic upgrade head && uv run uvicorn main:app --reload",
       "start": "uv run alembic upgrade head && uv run uvicorn main:app",
+      "qdrant:start": "docker start searchlight-qdrant || docker run -d --name searchlight-qdrant -p 6333:6333 -p 6334:6334 -v qdrant_data:/qdrant/storage qdrant/qdrant",
+      "qdrant:stop": "docker stop searchlight-qdrant",
       "db:revision": "uv run alembic revision --autogenerate -m",
       "db:upgrade": "uv run alembic upgrade head",
       "db:downgrade": "uv run alembic downgrade -1",
