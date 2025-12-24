@@ -12,17 +12,12 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
     gnupg \
-    curl \
     && add-apt-repository ppa:deadsnakes/ppa -y \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
     python3.13 \
     python3.13-dev \
-    python3.13-venv \
     ffmpeg \
-    libsm6 \
-    libxext6 \
-    libgl1 \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/python3.13 /usr/bin/python \
     && ln -sf /usr/bin/python3.13 /usr/bin/python3
