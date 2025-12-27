@@ -14,7 +14,7 @@
 ![CUDA](https://img.shields.io/badge/CUDA-12.8-76B900?logo=nvidia&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-[Features](#features) • [Installation](#installation) • [Architecture](#architecture) • [API](#api-endpoints)
+[Features](#features) • [Installation](#installation) • [Architecture](#architecture)
 
 </div>
 
@@ -45,7 +45,90 @@ A video search application that lets users find specific moments in their videos
 
 ## Architecture
 
-![Architecture Diagram](images/architecture.png)
+### Video Processing Pipeline
+```mermaid
+flowchart LR
+    subgraph Upload["1. Upload"]
+        A[Video File] --> B[Save to /uploads]
+        B --> C[Extract Metadata<br/>FFprobe]
+        C --> D[Generate Thumbnail]
+    end
+
+    subgraph Frames["2. Frame Extraction"]
+        E[Scene Detection<br/>AdaptiveDetector] --> F[Extract Keyframes<br/>FFmpeg]
+        F --> G[Save to /frames]
+    end
+
+    subgraph Audio["3. Audio Processing"]
+        H[Extract Audio<br/>FFmpeg → WAV] --> I[Transcribe<br/>faster-whisper]
+        I --> J[Segment Text<br/>+ Timestamps]
+    end
+
+    subgraph Embed["4. Embedding Generation"]
+        K[Keyframe Images] --> L[SigLIP2<br/>768-dim vectors]
+        M[Transcript Text] --> N[all-MiniLM-L6-v2<br/>384-dim vectors]
+    end
+
+    subgraph Store["5. Storage"]
+        O[(PostgreSQL<br/>Metadata + Transcripts)]
+        P[(Qdrant<br/>Visual Collection)]
+        Q[(Qdrant<br/>Speech Collection)]
+    end
+
+    D --> E
+    G --> K
+    J --> M
+    J --> O
+    L --> P
+    N --> Q
+```
+
+### Search Flow
+```mermaid
+flowchart LR
+    Q[/"User Query<br/>'man near red car'"/]
+    
+    subgraph SearchType["Search Type Selection"]
+        VIS[Visual Search]
+        SPE[Speech Search]
+        HYB[Hybrid Search]
+    end
+
+    subgraph Embedding["Query Embedding"]
+        VE[SigLIP2<br/>Text → 768-dim]
+        SE[all-MiniLM-L6-v2<br/>Text → 384-dim]
+    end
+
+    subgraph VectorSearch["Vector Similarity Search"]
+        VC[(Qdrant<br/>Visual Collection)]
+        SC[(Qdrant<br/>Speech Collection)]
+    end
+
+    subgraph Results["Result Processing"]
+        MERGE[Merge & Dedupe]
+        SCORE[Rescale Scores<br/>SigLIP sigmoid → 0-1]
+        ENRICH[Enrich with<br/>Video Metadata]
+    end
+
+    PG[(PostgreSQL)]
+    RES[/"Search Results<br/>Video + Timestamp + Score"/]
+
+    Q --> SearchType
+    VIS --> VE
+    SPE --> SE
+    HYB --> VE & SE
+    
+    VE -->|Cosine Similarity| VC
+    SE -->|Cosine Similarity| SC
+    
+    VC --> MERGE
+    SC --> MERGE
+    MERGE --> SCORE
+    SCORE --> ENRICH
+    PG --> ENRICH
+    ENRICH --> RES
+```
+
 
 ### Tech Stack
 
@@ -265,8 +348,19 @@ searchlightai/
 └── pnpm-workspace.yaml
 ```
 
+
 ---
 
 ## License
 
 MIT
+
+---
+
+<div align="center">
+
+**⭐ Star this repo if you find it useful! ⭐**
+
+Made with ❤️ by the Kiranbaby14
+
+</div>
